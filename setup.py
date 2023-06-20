@@ -19,7 +19,7 @@ def read(filename):
     with open(filename, **kwargs) as f:
         return f.read()
 
-name = 'ptemcee'
+name = 'ptemcee_for_orbitize'
 
 # Get current version.
 pattern = re.compile('__version__\s*=\s*(\'|")(.*?)(\'|")')

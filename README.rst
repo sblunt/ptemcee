@@ -1,7 +1,7 @@
 ptemcee
 =======
 
-ptemcee /'tɛmsiː/ (noun):
+ptemcee (noun):
     `Adaptive parallel tempering <http://arxiv.org/abs/1501.05823>`_ meets |emcee|_.
 
 *ptemcee*, pronounced "tem-cee", is fork of Daniel Foreman-Mackey's wonderful |emcee|_ to implement

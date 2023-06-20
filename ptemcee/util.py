@@ -1,14 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import (division, print_function, absolute_import,
-                        unicode_literals)
+from __future__ import division, print_function, absolute_import, unicode_literals
 
-__all__ = ["autocorr_function", "autocorr_integrated_time", "thermodynamic_integration_log_evidence"]
+__all__ = ['_ladder', 'get_acf', 'get_integrated_act', 'thermodynamic_integration_log_evidence']
 
 import numpy as np
 
-def autocorr_function(x, axis=0, fast=False):
+
+def _ladder(betas):
+    """
+    Convert an arbitrary iterable of floats into a sorted numpy array.
+
+    """
+
+    betas = np.array(betas)
+    betas[::-1].sort()
+    return betas
+
+
+def get_acf(x, axis=0, fast=False):
     """
     Estimate the autocorrelation function of a time series using the FFT.
 
@@ -31,20 +42,21 @@ def autocorr_function(x, axis=0, fast=False):
     # For computational efficiency, crop the chain to the largest power of
     # two if requested.
     if fast:
-        n = int(2**np.floor(np.log2(x.shape[axis])))
+        n = int(2 ** np.floor(np.log2(x.shape[axis])))
         m[axis] = slice(0, n)
         x = x
     else:
         n = x.shape[axis]
 
     # Compute the FFT and then (from that) the auto-correlation function.
-    f = np.fft.fft(x-np.mean(x, axis=axis), n=2*n, axis=axis)
+    f = np.fft.fft(x - np.mean(x, axis=axis), n=2 * n, axis=axis)
     m[axis] = slice(0, n)
-    acf = np.fft.ifft(f * np.conjugate(f), axis=axis)[m].real
+    acf = np.fft.ifft(f * np.conjugate(f), axis=axis)[tuple(m)].real
     m[axis] = 0
-    return acf / acf[m]
+    return acf / acf[tuple(m)]
 
-def autocorr_integrated_time(x, axis=0, window=50, fast=False):
+
+def get_integrated_act(x, axis=0, window=50, fast=False):
     """
     Estimate the integrated autocorrelation time of a time series.
 
@@ -68,18 +80,19 @@ def autocorr_integrated_time(x, axis=0, window=50, fast=False):
 
     """
     # Compute the autocorrelation function.
-    f = autocorr_function(x, axis=axis, fast=fast)
+    f = get_acf(x, axis=axis, fast=fast)
 
     # Special case 1D for simplicity.
     if len(f.shape) == 1:
-        return 1 + 2*np.sum(f[1:window])
+        return 1 + 2 * np.sum(f[1:window])
 
     # N-dimensional case.
     m = [slice(None), ] * len(f.shape)
     m[axis] = slice(1, window)
-    tau = 1 + 2*np.sum(f[m], axis=axis)
+    tau = 1 + 2 * np.sum(f[tuple(m)], axis=axis)
 
     return tau
+
 
 def thermodynamic_integration_log_evidence(betas, logls):
     """

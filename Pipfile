@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+name = "pypi"
+verify_ssl = true
+
+[dev-packages]
+pytest = "*"
+pytest-xdist = "*"
+funcsigs = {version = "*", markers="python_version < '3.3.0'"}
+pathlib2 = {version = ">=2.2.0", markers="python_version < '3.6.0'"}
+
+[packages]
+numpy = "*"

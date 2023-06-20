@@ -15,7 +15,7 @@ except ImportError:
 # Use UTF-8 if Python 3.
 major, minor1, minor2, release, serial = sys.version_info
 def read(filename):
-    kwargs = {'encoding': 'utf-8'} if major > 3 else {}
+    kwargs = {'encoding': 'utf-8'} if major >= 3 else {}
     with open(filename, **kwargs) as f:
         return f.read()
 
@@ -39,7 +39,8 @@ setup(
     long_description=read('README.rst'),
     package_data={'': ['LICENSE']},
     include_package_data=True,
-    install_requires=['numpy'],
+    install_requires=['numpy', 'attrs'],
+    tests_require=['pytest', 'pytest-xdist'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
@@ -47,5 +48,6 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
-    ]
+    ],
+    zip_safe=True,
 )

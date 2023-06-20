@@ -1,5 +1,9 @@
-ptemcee
-=======
+ptemcee for orbitize!
+=====================
+
+This is the version of ptemcee used for orbitize! This is a medium-term
+solution for ptemcee not being actively maintained. This version branches
+from ptemcee at the pypi v1 release on Aug 28, 2015. 
 
 ptemcee: (noun):
     `Adaptive parallel tempering <http://arxiv.org/abs/1501.05823>`_ meets |emcee|_.

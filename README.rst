@@ -14,8 +14,6 @@ parallel tempering more robustly.  As far as possible, it is designed as a drop-
 If you're trying to characterise awkward, multi-modal probability distributions, then *ptemcee* is
 your friend.
 
-.. image:: http://img.shields.io/travis/willvousden/ptemcee/master.svg?style=flat
-        :target: http://travis-ci.org/willvousden/ptemcee
 .. image:: http://img.shields.io/pypi/v/ptemcee.svg?style=flat
         :target: https://pypi.python.org/pypi/ptemcee/
 .. image:: http://img.shields.io/badge/license-MIT-blue.svg?style=flat

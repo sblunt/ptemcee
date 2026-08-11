@@ -425,6 +425,9 @@ class Sampler(object):
             else:
                 yield p, logpost, logl
 
+        if self.pool is not None:
+            self.pool.close()
+
     def _evaluate(self, ps):
         mapf = map if self.pool is None else self.pool.map
         results = list(mapf(self._likeprior, ps.reshape((-1, self.dim))))

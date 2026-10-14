@@ -203,6 +203,9 @@ class Sampler(object):
 
     :param adaptation_time: (optional)
         Time-scale for temperature dynamics.  Default: 100.
+    
+    :param nblobs: (optional)
+        Number of blobs returned by the logl function in the format loglike, blob1, blob2, ...  Default: 0.
 
     """
     def __init__(self, nwalkers, dim, logl, logp,

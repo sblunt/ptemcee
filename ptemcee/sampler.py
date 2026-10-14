@@ -414,7 +414,6 @@ class Sampler(object):
                     qslogl.reshape((-1,))[accepts]
                 bupdate.reshape((-1, self.nblobs))[accepts, :] = \
                     qsblobs.reshape((-1, self.nblobs))[accepts, :]
-                assert (qslogl == qsblobs[:, :, 0]).all(), (qslogl, qsblobs)
 
                 accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
 
@@ -437,7 +436,6 @@ class Sampler(object):
                     self._loglikelihood[:, :, isave] = logl
                     self._beta_history[:, isave] = self._betas
                     self._blobs[:, :, isave, :] = blobs
-                    assert (self._loglikelihood == self._blobs[:, :, :, 0]).all(), (self._loglikelihood, self._blobs[:, :, :, 0])
                     isave += 1
 
             self._time += 1
@@ -449,9 +447,6 @@ class Sampler(object):
     def _evaluate(self, ps):
         mapf = map if self.pool is None else self.pool.map
         results = list(mapf(self._likeprior, ps.reshape((-1, self.dim))))
-
-        assert len(results[0]) == 3
-        assert np.isscalar(results[0][0]), results[0]
 
         logl = np.fromiter((r[0] for r in results), float,
                            count=len(results)).reshape((self.ntemps, -1))

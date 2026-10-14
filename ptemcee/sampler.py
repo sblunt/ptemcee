@@ -383,7 +383,8 @@ class Sampler(object):
                 jsample = (j + 1) % 2
                 pupdate = p[:, jupdate::2, :]
                 psample = p[:, jsample::2, :]
-                bupdate = blobs[:, jupdate::2, :]
+                if self.nblobs > 0:
+                    bupdate = blobs[:, jupdate::2, :]
 
                 zs = np.exp(self._random.uniform(low=-np.log(self.a),
                                                  high=np.log(self.a),
@@ -415,8 +416,9 @@ class Sampler(object):
                     qslogpost.reshape((-1,))[accepts]
                 logl[:, jupdate::2].reshape((-1,))[accepts] = \
                     qslogl.reshape((-1,))[accepts]
-                bupdate.reshape((-1, self.nblobs))[accepts, :] = \
-                    qsblobs.reshape((-1, self.nblobs))[accepts, :]
+                if self.nblobs > 0:
+                    bupdate.reshape((-1, self.nblobs))[accepts, :] = \
+                        qsblobs.reshape((-1, self.nblobs))[accepts, :]
 
                 accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
 
@@ -438,7 +440,8 @@ class Sampler(object):
                     self._logposterior[:, :, isave] = logpost
                     self._loglikelihood[:, :, isave] = logl
                     self._beta_history[:, isave] = self._betas
-                    self._blobs[:, :, isave, :] = blobs
+                    if blobs is not None:
+                        self._blobs[:, :, isave, :] = blobs
                     isave += 1
 
             self._time += 1
@@ -455,9 +458,11 @@ class Sampler(object):
                            count=len(results)).reshape((self.ntemps, -1))
         logp = np.fromiter((r[1] for r in results), float,
                            count=len(results)).reshape((self.ntemps, -1))
-        blobs = np.fromiter((r[2] for r in results), np.dtype((float, self.nblobs)),
-                           count=len(results)).reshape((self.ntemps, -1, self.nblobs))
-
+        if self.nblobs > 0:
+            blobs = np.fromiter((r[2] for r in results), np.dtype((float, self.nblobs)),
+                            count=len(results)).reshape((self.ntemps, -1, self.nblobs))
+        else:
+            blobs = None
         return logl, logp, blobs
 
     def _tempered_likelihood(self, logl, betas=None):
@@ -512,18 +517,21 @@ class Sampler(object):
             ratios[i - 1] = nacc / self.nwalkers
 
             ptemp = np.copy(p[i, iperm[asel], :])
-            btemp = np.copy(blobs[i, iperm[asel], :])
+            if blobs is not None:
+                btemp = np.copy(blobs[i, iperm[asel], :])
             logltemp = np.copy(logl[i, iperm[asel]])
             logprtemp = np.copy(logpost[i, iperm[asel]])
 
             p[i, iperm[asel], :] = p[i - 1, i1perm[asel], :]
-            blobs[i, iperm[asel], :] = blobs[i - 1, i1perm[asel], :]
+            if blobs is not None:
+                blobs[i, iperm[asel], :] = blobs[i - 1, i1perm[asel], :]
             logl[i, iperm[asel]] = logl[i - 1, i1perm[asel]]
             logpost[i, iperm[asel]] = logpost[i - 1, i1perm[asel]] \
                 - dbeta * logl[i - 1, i1perm[asel]]
 
             p[i - 1, i1perm[asel], :] = ptemp
-            blobs[i - 1, i1perm[asel], :] = btemp
+            if blobs is not None:
+                blobs[i - 1, i1perm[asel], :] = btemp
             logl[i - 1, i1perm[asel]] = logltemp
             logpost[i - 1, i1perm[asel]] = logprtemp + dbeta * logltemp
 
@@ -575,7 +583,10 @@ class Sampler(object):
             self._loglikelihood = np.zeros((self.ntemps, self.nwalkers,
                                             nsave))
             self._beta_history = np.zeros((self.ntemps, nsave))
-            self._blobs = np.zeros((self.ntemps, self.nwalkers, nsave, self.nblobs))
+            if self.nblobs > 0:
+                self._blobs = np.zeros((self.ntemps, self.nwalkers, nsave, self.nblobs))
+            else:
+                self._blobs = None
         else:
             isave = self._chain.shape[2]
             self._chain = np.concatenate((self._chain,
@@ -596,9 +607,10 @@ class Sampler(object):
             self._beta_history = np.concatenate((self._beta_history,
                                                  np.zeros((self.ntemps, nsave))),
                                                 axis=1)
-            self._blobs = np.concatenate((self._blobs,
-                                                 np.full((self.ntemps, self.nwalkers, nsave, self.nblobs))),
-                                                axis=2)
+            if self.nblobs > 0:
+                self._blobs = np.concatenate((self._blobs,
+                                                    np.full((self.ntemps, self.nwalkers, nsave, self.nblobs))),
+                                                    axis=2)
 
         return isave
 
@@ -673,7 +685,7 @@ class Sampler(object):
     def blobs(self):
         """
         Returns the stored chain of samples; shape ``(Ntemps,
-        Nwalkers, Nsteps, Nblobs)``.
+        Nwalkers, Nsteps, Nblobs)``. None if nblobs is 0.
 
         """
         return self._blobs

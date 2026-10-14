@@ -137,7 +137,7 @@ class Tests(object):
                     'Sampler failed with unexpected exception type.'
                 return
         else:
-            for p, logpost, loglike, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
+            for p, logpost, loglike, blobs, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
                 assert np.all(logpost > -np.inf) and np.all(loglike > -np.inf), \
                     'Invalid posterior/likelihood values; outside posterior support.'
                 assert np.all(ratios >= 0) and np.all(ratios <= 1), \

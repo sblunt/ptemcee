@@ -117,13 +117,14 @@ class LikePriorEvaluator(object):
 
     def __init__(self, logl, logp,
                  loglargs=[], logpargs=[],
-                 loglkwargs={}, logpkwargs={}):
+                 loglkwargs={}, logpkwargs={}, nblobs=0):
         self.logl = logl
         self.logp = logp
         self.loglargs = loglargs
         self.logpargs = logpargs
         self.loglkwargs = loglkwargs
         self.logpkwargs = logpkwargs
+        self.nblobs = nblobs
 
     def __call__(self, x):
         lp = self.logp(x, *self.logpargs, **self.logpkwargs)
@@ -133,12 +134,19 @@ class LikePriorEvaluator(object):
         if lp == float('-inf'):
             # Can't return -inf, since this messes with beta=0 behaviour.
             ll = 0
+            blobs = [0] * self.nblobs
         else:
-            ll = self.logl(x, *self.loglargs, **self.loglkwargs)
+            ret = self.logl(x, *self.loglargs, **self.loglkwargs)
+            if self.nblobs > 0:
+                ll = ret[0]
+                blobs = ret[1:1+self.nblobs]
+            else:
+                ll = ret
+                blobs = []
             if np.isnan(ll).any():
                 raise ValueError('Log likelihood function returned NaN.')
 
-        return ll, lp
+        return ll, lp, blobs
 
 class Sampler(object):
     """
@@ -195,6 +203,9 @@ class Sampler(object):
 
     :param adaptation_time: (optional)
         Time-scale for temperature dynamics.  Default: 100.
+    
+    :param nblobs: (optional)
+        Number of blobs returned by the logl function in the format loglike, blob1, blob2, ...  Default: 0.
 
     """
     def __init__(self, nwalkers, dim, logl, logp,
@@ -203,18 +214,19 @@ class Sampler(object):
                  loglargs=[], logpargs=[],
                  loglkwargs={}, logpkwargs={},
                  adaptation_lag=10000, adaptation_time=100,
-                 random=None):
+                 random=None, nblobs=0):
         if random is None:
             self._random = np.random.mtrand.RandomState()
         else:
             self._random = random
 
-        self._likeprior = LikePriorEvaluator(logl, logp, loglargs, logpargs, loglkwargs, logpkwargs)
+        self._likeprior = LikePriorEvaluator(logl, logp, loglargs, logpargs, loglkwargs, logpkwargs, nblobs)
         self.a = a
         self.nwalkers = nwalkers
         self.dim = dim
         self.adaptation_time = adaptation_time
         self.adaptation_lag = adaptation_lag
+        self.nblobs = nblobs
 
         # Set temperature ladder.  Append beta=0 to generated ladder.
         if betas is not None:
@@ -249,12 +261,14 @@ class Sampler(object):
         self._logposterior = None
         self._loglikelihood = None
         self._beta_history = None
+        self._blobs = None
 
         # Reset sampler state.
         self._time = 0
         self._p0 = None
         self._logposterior0 = None
         self._loglikelihood0 = None
+        self._blobs0 = None
         if betas is not None:
             self._betas = betas
 
@@ -318,6 +332,8 @@ class Sampler(object):
 
         * ``loglike``, the current likelihood values for the walkers.
 
+        * ``blobs``, the current blobs for the walkers.
+
         * ``ratios``, the instantaneous inter-chain acceptance ratios (if requested).
 
         """
@@ -342,14 +358,16 @@ class Sampler(object):
 
         # If we have no likelihood or prior values, compute them.
         if self._logposterior0 is None or self._loglikelihood0 is None:
-            logl, logp = self._evaluate(p)
+            logl, logp, blobs = self._evaluate(p)
             logpost = self._tempered_likelihood(logl) + logp
 
             self._loglikelihood0 = logl
             self._logposterior0 = logpost
+            self._blobs0 = blobs
         else:
             logl = self._loglikelihood0
             logpost = self._logposterior0
+            blobs = self._blobs0
 
         if (logpost == -np.inf).any():
             raise ValueError('Attempting to start with samples outside posterior support.')
@@ -365,6 +383,8 @@ class Sampler(object):
                 jsample = (j + 1) % 2
                 pupdate = p[:, jupdate::2, :]
                 psample = p[:, jsample::2, :]
+                if self.nblobs > 0:
+                    bupdate = blobs[:, jupdate::2, :]
 
                 zs = np.exp(self._random.uniform(low=-np.log(self.a),
                                                  high=np.log(self.a),
@@ -378,7 +398,7 @@ class Sampler(object):
                         (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
                                                    psample[k, js, :])
 
-                qslogl, qslogp = self._evaluate(qs)
+                qslogl, qslogp, qsblobs = self._evaluate(qs)
                 qslogpost = self._tempered_likelihood(qslogl) + qslogp
 
                 logpaccept = self.dim*np.log(zs) + qslogpost \
@@ -396,13 +416,16 @@ class Sampler(object):
                     qslogpost.reshape((-1,))[accepts]
                 logl[:, jupdate::2].reshape((-1,))[accepts] = \
                     qslogl.reshape((-1,))[accepts]
+                if self.nblobs > 0:
+                    bupdate.reshape((-1, self.nblobs))[accepts, :] = \
+                        qsblobs.reshape((-1, self.nblobs))[accepts, :]
 
                 accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
 
                 self.nprop[:, jupdate::2] += 1.0
                 self.nprop_accepted[:, jupdate::2] += accepts
 
-            p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
+            p, ratios, blobs = self._temperature_swaps(self._betas, p, logpost, logl, blobs)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
             # adjustment?
@@ -417,13 +440,15 @@ class Sampler(object):
                     self._logposterior[:, :, isave] = logpost
                     self._loglikelihood[:, :, isave] = logl
                     self._beta_history[:, isave] = self._betas
+                    if blobs is not None:
+                        self._blobs[:, :, isave, :] = blobs
                     isave += 1
 
             self._time += 1
             if swap_ratios:
-                yield p, logpost, logl, ratios
+                yield p, logpost, logl, blobs, ratios
             else:
-                yield p, logpost, logl
+                yield p, logpost, logl, blobs
 
     def _evaluate(self, ps):
         mapf = map if self.pool is None else self.pool.map
@@ -433,8 +458,12 @@ class Sampler(object):
                            count=len(results)).reshape((self.ntemps, -1))
         logp = np.fromiter((r[1] for r in results), float,
                            count=len(results)).reshape((self.ntemps, -1))
-
-        return logl, logp
+        if self.nblobs > 0:
+            blobs = np.fromiter((r[2] for r in results), np.dtype((float, self.nblobs)),
+                            count=len(results)).reshape((self.ntemps, -1, self.nblobs))
+        else:
+            blobs = None
+        return logl, logp, blobs
 
     def _tempered_likelihood(self, logl, betas=None):
         """
@@ -456,7 +485,7 @@ class Sampler(object):
 
         return loglT
 
-    def _temperature_swaps(self, betas, p, logpost, logl):
+    def _temperature_swaps(self, betas, p, logpost, logl, blobs):
         """
         Perform parallel-tempering temperature swaps on the state
         in ``p`` with associated ``logpost`` and ``logl``.
@@ -488,19 +517,25 @@ class Sampler(object):
             ratios[i - 1] = nacc / self.nwalkers
 
             ptemp = np.copy(p[i, iperm[asel], :])
+            if blobs is not None:
+                btemp = np.copy(blobs[i, iperm[asel], :])
             logltemp = np.copy(logl[i, iperm[asel]])
             logprtemp = np.copy(logpost[i, iperm[asel]])
 
             p[i, iperm[asel], :] = p[i - 1, i1perm[asel], :]
+            if blobs is not None:
+                blobs[i, iperm[asel], :] = blobs[i - 1, i1perm[asel], :]
             logl[i, iperm[asel]] = logl[i - 1, i1perm[asel]]
             logpost[i, iperm[asel]] = logpost[i - 1, i1perm[asel]] \
                 - dbeta * logl[i - 1, i1perm[asel]]
 
             p[i - 1, i1perm[asel], :] = ptemp
+            if blobs is not None:
+                blobs[i - 1, i1perm[asel], :] = btemp
             logl[i - 1, i1perm[asel]] = logltemp
             logpost[i - 1, i1perm[asel]] = logprtemp + dbeta * logltemp
 
-        return p, ratios
+        return p, ratios, blobs
 
     def _get_ladder_adjustment(self, time, betas0, ratios):
         """
@@ -548,6 +583,10 @@ class Sampler(object):
             self._loglikelihood = np.zeros((self.ntemps, self.nwalkers,
                                             nsave))
             self._beta_history = np.zeros((self.ntemps, nsave))
+            if self.nblobs > 0:
+                self._blobs = np.zeros((self.ntemps, self.nwalkers, nsave, self.nblobs))
+            else:
+                self._blobs = None
         else:
             isave = self._chain.shape[2]
             self._chain = np.concatenate((self._chain,
@@ -568,6 +607,10 @@ class Sampler(object):
             self._beta_history = np.concatenate((self._beta_history,
                                                  np.zeros((self.ntemps, nsave))),
                                                 axis=1)
+            if self.nblobs > 0:
+                self._blobs = np.concatenate((self._blobs,
+                                                    np.full((self.ntemps, self.nwalkers, nsave, self.nblobs))),
+                                                    axis=2)
 
         return isave
 
@@ -637,6 +680,16 @@ class Sampler(object):
 
         """
         return self._chain
+
+    @property
+    def blobs(self):
+        """
+        Returns the stored chain of samples; shape ``(Ntemps,
+        Nwalkers, Nsteps, Nblobs)``. None if nblobs is 0.
+
+        """
+        return self._blobs
+
 
     @property
     def flatchain(self):
